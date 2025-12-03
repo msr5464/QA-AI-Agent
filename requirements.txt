@@ -1,0 +1,30 @@
+# Core Dependencies
+python-dotenv>=1.0.0
+pandas>=2.0.0
+
+# AI/LLM
+openai>=1.0.0
+langchain>=0.1.0
+langchain-openai>=0.0.5
+langchain-ollama
+
+# Parsing
+beautifulsoup4>=4.12.0
+lxml>=4.9.0
+pyyaml>=6.0.1
+
+# Database
+mysql-connector-python>=8.0.33
+
+# Reporting
+secure-smtplib>=0.1.1
+slack-sdk>=3.23.0
+streamlit>=1.28.0
+
+# Utilities
+requests>=2.31.0
+schedule>=1.2.0
+
+# Testing
+pytest>=7.4.0
+pytest-cov>=4.1.0
