@@ -87,17 +87,19 @@ cp config/.env.example config/.env
 
 ### Running the Agent
 
-Use the unified helper script (it activates the virtualenv and wires sensible defaults):
+**macOS/Linux**
 
 ```bash
-# Analyze a specific report directory
-./run.sh --report-dir testdata/Regression-AccountOpening-Tests-420 --no-slack
-
-# Let the script locate the latest report automatically
-./run.sh
+./scripts/run.sh --report-dir testdata/Regression-AccountOpening-Tests-420 --no-slack
 ```
 
-`run.sh` defaults to `--report-dir testdata/Regression-Growth-Tests-442 --no-slack` when no arguments are provided. Pass any CLI flags (e.g., `--slack-channel` or `--report-dir`) the same way you would to `python src/main.py`.
+**Windows (PowerShell)**
+
+```powershell
+.\scripts\run.ps1 --report-dir testdata/Regression-AccountOpening-Tests-420 --no-slack
+```
+
+Both scripts default to `--report-dir testdata/Regression-Growth-Tests-442 --no-slack` when no arguments are passed. Supply additional CLI flags (e.g., `--slack-channel`, `--dashboard-url`) exactly as you would with `python src/main.py`.
 
 **Note**: High-level flow — locate report, query MySQL, parse HTML logs, merge everything, run AI analysis, and render HTML/Slack outputs. Full details live in the **Workflow & Data Flow** section below.
 
@@ -114,7 +116,11 @@ The agent uses a database-first approach:
 myQaAgent/
 ├── README.md                      # This file
 ├── requirements.txt               # Python dependencies
-├── run.sh                        # Unified run script (activates venv + defaults)
+├── scripts/                      # Cross-platform helper scripts
+│   ├── run.sh                    # macOS/Linux entrypoint
+│   ├── run.ps1                   # Windows entrypoint
+│   └── windows/
+│       └── setup.ps1             # Windows bootstrap script
 ├── config/
 │   ├── .env.example              # Template env variables (copy to .env)
 │   ├── .env                      # Local environment values (gitignored)
@@ -372,7 +378,7 @@ Identifies tests failing repeatedly (configurable: 4+ failures in last 10 runs) 
 
 Tracks test quality trends (improving/declining/stable) and provides execution history visualization. Refer to the **Workflow & Data Flow** section for the full narrative.
 
-Ready to run it in your environment? Configure the basics below and launch via `run.sh`.
+Ready to run it in your environment? Configure the basics below and launch via `scripts/run.sh` or `scripts/run.ps1`. Detailed Windows + Jenkins instructions live in `scripts/DEPLOYMENT.md`.
 
 ## 🔧 Configuration Options
 
@@ -383,6 +389,7 @@ Ready to run it in your environment? Configure the basics below and launch via `
 - **Flaky detection**: Tune `FLAKY_TESTS_LAST_RUNS` (window) and `FLAKY_TESTS_MIN_FAILURES` (threshold) to match your stability expectations.
 
 Full variable list with defaults lives in `config/.env.example`.
+
 
 ## 📈 Report Features
 
