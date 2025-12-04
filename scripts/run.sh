@@ -2,20 +2,20 @@
 # Unified run script for the AI QA Agent.
 # Usage examples:
 #   ./scripts/run.sh
-#     Runs Regression Growth tests with reports stored in
-#     testdata/Regression-Growth-Tests-442 and disables Slack notifications.
+#     Runs with default input directory (testdata/Regression-Growth-Tests-442)
+#     and output directory (reports).
 #
-#   ./scripts/run.sh --report-dir testdata/Regression-Smoke-Tests-420 --no-slack
-#     Runs against a custom report directory while still silencing Slack.
+#   ./scripts/run.sh --input-dir testdata/Regression-Smoke-Tests-420 --output-dir custom-reports
+#     Runs against a custom input directory with a custom output directory.
 #
-#   ./scripts/run.sh --report-dir testdata/Regression-Load-Tests-420 --slack-channel qa-alerts
-#     Runs with a custom report directory and posts to a specific Slack channel.
+#   ./scripts/run.sh --table-name results_custom_project
+#     Runs with explicit database table name, overriding auto-detection.
 
 set -euo pipefail
 
 # Default arguments when none are provided.
 if [ "$#" -eq 0 ]; then
-  set -- --report-dir testdata/Regression-Growth-Tests-442 --no-slack
+  set -- --input-dir testdata/Regression-Growth-Tests-442 --output-dir reports
 fi
 
 # Activate virtual environment and run the agent with the resolved args.
@@ -27,21 +27,5 @@ EXIT_CODE=$?
 
 # Display all output
 echo "$OUTPUT"
-
-# Extract and display report path if available
-REPORT_PATH=$(echo "$OUTPUT" | grep "^REPORT_PATH=" | cut -d'=' -f2-)
-REPORT_URL=$(echo "$OUTPUT" | grep "^REPORT_URL=" | cut -d'=' -f2-)
-
-if [ -n "$REPORT_PATH" ]; then
-    echo ""
-    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo "📄 Generated Report:"
-    echo "   Path: $REPORT_PATH"
-    if [ -n "$REPORT_URL" ]; then
-        echo "   URL:  $REPORT_URL"
-    fi
-    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-fi
-
 exit $EXIT_CODE
 

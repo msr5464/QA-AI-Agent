@@ -22,7 +22,7 @@ def get_html_styles(c_success: str, c_warning: str, c_danger: str, c_info: str, 
     return f"""
 /* Reset & Base */
                 body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; line-height: 1.5; color: #333333; margin: 0; padding: 0; background-color: #f4f6f9; }}
-                .container {{ max-width: 1200px; margin: 20px auto; background: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }}
+                .container {{ max-width: 1400px; margin: 20px auto; background: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }}
                 
                 /* Header */
                 .header {{ background: linear-gradient(135deg, #2c3e50 0%, #3498db 100%); color: white; padding: 17px 24px; text-align: center; }}

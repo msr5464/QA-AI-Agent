@@ -15,6 +15,12 @@ from ..utils import normalize_root_cause
 from ..settings import Config
 from ..database import Database, MYSQL_AVAILABLE, Error
 
+# Import pymysql for DictCursor
+try:
+    import pymysql
+except ImportError:
+    pymysql = None
+
 logger = logging.getLogger(__name__)
 
 
@@ -34,25 +40,28 @@ class AgentMemory:
         """Get MySQL database connection (delegates to Database class)"""
         return self.db.get_connection()
     
-    def get_test_results_by_buildtag(self, report_name: str, build_tag: str) -> List[Dict]:
+    def get_test_results_by_buildtag(self, report_name: str, build_tag: str, table_name: Optional[str] = None) -> List[Dict]:
         """
         Query database for all test results for a specific buildTag.
         
         Args:
-            report_name: Report name (used to determine table name)
+            report_name: Report name (used to determine table name if table_name not provided)
             build_tag: Build tag to query (e.g., "Regression-AccountOpening-Tests-424")
+            table_name: Optional explicit table name to query
             
         Returns:
             List of dictionaries with test result data from database
         """
-        table_name = self._get_table_name_from_report_name(report_name)
+        if not table_name:
+            table_name = self._get_table_name_from_report_name(report_name)
         if not table_name:
             raise ValueError(f"Cannot determine table name for report: {report_name}")
         
         connection = None
         try:
             connection = self._get_db_connection()
-            cursor = connection.cursor(dictionary=True)
+            # PyMySQL uses DictCursor instead of dictionary=True
+            cursor = connection.cursor(pymysql.cursors.DictCursor)
             
             # Check which columns exist in the table
             cursor.execute(f"SHOW COLUMNS FROM {table_name}")
@@ -108,29 +117,36 @@ class AgentMemory:
             logger.error(f"Error querying database for buildTag {build_tag}: {e}")
             raise
         finally:
-            if connection and connection.is_connected():
-                cursor.close()
-                connection.close()
+            if connection:
+                try:
+                    cursor.close()
+                except:
+                    pass
+                if connection.open:
+                    connection.close()
     
     def _get_test_execution_history_from_db(
         self,
         report_name: str,
         test_names: List[str],
-        limit_per_test: int = 10
+        limit_per_test: int = 10,
+        table_name: Optional[str] = None
     ) -> Dict[str, List[Dict]]:
         """
         Get test execution history from MySQL database for specific test cases.
         Queries by testcaseName (not buildTag) to get last N executions across all builds.
         
         Args:
-            report_name: Report name (used to determine table name)
+            report_name: Report name (used to determine table name if table_name not provided)
             test_names: List of test case names to query
             limit_per_test: Number of recent executions to fetch per test (default: 10)
+            table_name: Optional explicit table name to query
             
         Returns:
             Dictionary mapping testcaseName to list of execution records (ordered by id desc)
         """
-        table_name = self._get_table_name_from_report_name(report_name)
+        if not table_name:
+            table_name = self._get_table_name_from_report_name(report_name)
         if not table_name:
             logger.warning(f"Cannot determine table name for report: {report_name}")
             return {}
@@ -144,7 +160,7 @@ class AgentMemory:
         
         try:
             connection = self._get_db_connection()
-            cursor = connection.cursor(dictionary=True)
+            cursor = connection.cursor(pymysql.cursors.DictCursor)
             
             # First, check which columns exist in the table
             cursor.execute(f"SHOW COLUMNS FROM {table_name}")
@@ -462,9 +478,13 @@ class AgentMemory:
             logger.error(f"Error querying database: {e}")
             return {}
         finally:
-            if connection and connection.is_connected():
-                cursor.close()
-                connection.close()
+            if connection:
+                try:
+                    cursor.close()
+                except:
+                    pass
+                if connection.open:
+                    connection.close()
         
         return test_history
     
@@ -474,7 +494,8 @@ class AgentMemory:
         days: int = 10,
         min_occurrences: int = 3,
         report_name: str = None,
-        all_test_names: Optional[List[str]] = None
+        all_test_names: Optional[List[str]] = None,
+        table_name: Optional[str] = None
     ) -> List[Dict]:
         """
         Detect tests that fail repeatedly using MySQL database.
@@ -485,6 +506,7 @@ class AgentMemory:
             min_occurrences: Minimum occurrences to be considered recurring
             report_name: Report name (required) to determine MySQL table name
             all_test_names: Optional list of all test names (to query history for all tests, not just failures)
+            table_name: Optional explicit table name to query
             
         Returns:
             List of dictionaries with recurring failure info
@@ -496,13 +518,13 @@ class AgentMemory:
             raise ValueError("report_name is required for recurring failures detection")
         
         if not MYSQL_AVAILABLE:
-            raise ImportError("mysql-connector-python is required. Install with: pip install mysql-connector-python")
+            raise ImportError("pymysql is required. Install with: pip install pymysql")
         
         # Use all_test_names if provided, otherwise just current_failures
         test_names_to_query = all_test_names if all_test_names else current_failures
         logger.info(f"📊 Using MySQL database for recurring failures (report: {report_name}, querying {len(test_names_to_query)} tests)")
         return self._detect_recurring_failures_from_db(
-            current_failures, days, min_occurrences, report_name, test_names_to_query
+            current_failures, days, min_occurrences, report_name, test_names_to_query, table_name
         )
     
     def _detect_recurring_failures_from_db(
@@ -511,7 +533,8 @@ class AgentMemory:
         days: int = 10,
         min_occurrences: int = 3,
         report_name: str = None,
-        test_names_to_query: List[str] = None
+        test_names_to_query: List[str] = None,
+        table_name: Optional[str] = None
     ) -> List[Dict]:
         """
         Detect recurring failures from MySQL database.
@@ -526,7 +549,8 @@ class AgentMemory:
         test_history = self._get_test_execution_history_from_db(
             report_name, 
             test_names=test_names_to_query,
-            limit_per_test=Config.FLAKY_TESTS_LAST_RUNS
+            limit_per_test=Config.FLAKY_TESTS_LAST_RUNS,
+            table_name=table_name
         )
         
         if not test_history:
@@ -944,13 +968,14 @@ class AgentMemory:
         
         return 'UNKNOWN'
     
-    def get_trend_analysis(self, days: int = 10, report_name: str = None) -> Dict:
+    def get_trend_analysis(self, days: int = 10, report_name: str = None, table_name: Optional[str] = None) -> Dict:
         """
         Analyze trends over time using MySQL database.
         
         Args:
             days: Number of days to analyze
             report_name: Report name (required) to determine MySQL table name
+            table_name: Optional explicit table name to query
             
         Returns:
             Dictionary with trend analysis
@@ -962,30 +987,32 @@ class AgentMemory:
             raise ValueError("report_name is required for trend analysis")
         
         if not MYSQL_AVAILABLE:
-            raise ImportError("mysql-connector-python is required. Install with: pip install mysql-connector-python")
+            raise ImportError("pymysql is required. Install with: pip install pymysql")
         
         logger.info(f"📊 Using MySQL database for trend analysis (report: {report_name})")
-        return self._get_trend_analysis_from_db(report_name, days)
+        return self._get_trend_analysis_from_db(report_name, days, table_name)
     
-    def _get_trend_analysis_from_db(self, report_name: str, days: int = 10) -> Dict:
+    def _get_trend_analysis_from_db(self, report_name: str, days: int = 10, table_name: Optional[str] = None) -> Dict:
         """
         Get trend analysis from MySQL database by grouping test results by buildTag.
         
         Args:
             report_name: Report name (used to determine table name)
             days: Number of days to analyze
+            table_name: Optional explicit table name to query
             
         Returns:
             Dictionary with trend analysis
         """
-        table_name = self._get_table_name_from_report_name(report_name)
+        if not table_name:
+            table_name = self._get_table_name_from_report_name(report_name)
         if not table_name:
             raise ValueError(f"Cannot determine table name for report: {report_name}")
         
         connection = None
         try:
             connection = self._get_db_connection()
-            cursor = connection.cursor(dictionary=True)
+            cursor = connection.cursor(pymysql.cursors.DictCursor)
             
             # Check which columns exist
             cursor.execute(f"SHOW COLUMNS FROM {table_name}")
@@ -1103,9 +1130,13 @@ class AgentMemory:
             logger.error(f"Error querying database for trend analysis: {e}")
             raise
         finally:
-            if connection and connection.is_connected():
-                cursor.close()
-                connection.close()
+            if connection:
+                try:
+                    cursor.close()
+                except:
+                    pass
+                if connection.open:
+                    connection.close()
     
     
     

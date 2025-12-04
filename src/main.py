@@ -32,16 +32,23 @@ from src.parsers.data_builder import (
 from src.agent.analyzer import TestAnalyzer
 from src.agent.summary_generator import SummaryGenerator
 from src.agent.memory import AgentMemory
-from src.reporters.slack_reporter import SlackReporter
 from src.reporters.report_generator import ReportGenerator
 
 # Configure logging
+# Configure logging with UTF-8 encoding for cross-platform compatibility
+import sys
+
+# Set UTF-8 encoding for stdout/stderr to handle emoji characters
+if sys.platform == 'win32':
+    sys.stdout.reconfigure(encoding='utf-8')
+    sys.stderr.reconfigure(encoding='utf-8')
+
 logging.basicConfig(
     level=logging.INFO,
     format=Config.LOG_FORMAT,
     handlers=[
-        logging.FileHandler(Config.LOG_FILE_NAME),
-        logging.StreamHandler()
+        logging.FileHandler(Config.LOG_FILE_NAME, encoding='utf-8'),
+        logging.StreamHandler(sys.stdout)
     ]
 )
 
@@ -51,14 +58,20 @@ def main():
     """Run the QA AI Agent workflow"""
     
     parser = argparse.ArgumentParser(description="QA AI Agent")
-    parser.add_argument("--report-dir", help="Path to specific report directory")
-    parser.add_argument("--no-slack", action="store_true", help="Disable Slack reporting")
+    parser.add_argument("--input-dir", help="Path to input directory containing test reports")
+    parser.add_argument("--output-dir", help="Path to output directory for generated reports")
+    parser.add_argument("--table-name", help="Explicit database table name to query (overrides auto-detection)")
     args = parser.parse_args()
     
     logger.info("🚀 Starting QA AI Agent...")
     
-    # 1. Locate Report
-    report_dir = args.report_dir
+    # Determine report directory to process
+    report_dir = args.input_dir
+    
+    # Determine output directory for reports
+    output_dir = args.output_dir if args.output_dir else Config.OUTPUT_DIR
+    
+    # If no input-dir provided, use default INPUT_DIR
     if not report_dir:
         logger.info(f"Looking for reports in {Config.INPUT_DIR}...")
         report_dir = find_latest_report(Config.INPUT_DIR)
@@ -78,16 +91,22 @@ def main():
     memory = AgentMemory()
     
     try:
-        db_results = memory.get_test_results_by_buildtag(report_name, build_tag)
+        # Use explicit table name if provided, otherwise it will be derived from report_name inside the method
+        db_results = memory.get_test_results_by_buildtag(report_name, build_tag, table_name=args.table_name)
+        
         if not db_results:
             logger.error(f"❌ No test results found in database for buildTag: {build_tag}")
             logger.error("   Make sure the test results have been inserted into the database first.")
+            logger.error(f"   Check: DB_HOST={Config.DB_HOST}, DB_NAME={Config.DB_NAME}")
             return
         
         logger.info(f"📊 Found {len(db_results)} test results in database")
         
     except Exception as e:
         logger.error(f"Failed to query database: {e}")
+        logger.error("Please check your database configuration in config/.env")
+        import traceback
+        traceback.print_exc()
         return
     
     # 3. Calculate Flaky Tests (using database)
@@ -103,10 +122,16 @@ def main():
         days=Config.FLAKY_TESTS_LAST_RUNS,
         min_occurrences=Config.FLAKY_TESTS_MIN_FAILURES,
         report_name=report_name,
-        all_test_names=all_test_names_from_db
+        all_test_names=all_test_names_from_db,
+        table_name=args.table_name
     )
     
-    trends = memory.get_trend_analysis(days=10, report_name=report_name)
+    # 4. Trend Analysis
+    trends = {}
+    try:
+        trends = memory.get_trend_analysis(days=10, report_name=report_name, table_name=args.table_name)
+    except Exception as e:
+        logger.error(f"Error calculating trends: {e}")
     
     if recurring:
         logger.info(f"⚠️ Detected {len(recurring)} recurring failures")
@@ -257,20 +282,11 @@ def main():
     # Save HTML report with dynamic name based on report_name
     # Sanitize report_name for filename (remove invalid characters)
     safe_report_name = "".join(c for c in report_name if c.isalnum() or c in ('-', '_', ' ')).strip().replace(' ', '-')
-    html_report_path = Path(Config.OUTPUT_DIR) / f"AI-Analysis-Report_{safe_report_name}.html"
+    html_report_path = Path(output_dir) / f"AI-Generated-Report_{safe_report_name}.html"
     saved_path = report_gen.save_report(html_content, str(html_report_path))
     logger.info(f"📄 HTML report saved to: {saved_path}")
 
-    # 8. Send to Slack with report link
-    if not args.no_slack:
-        logger.info("📱 Sending to Slack...")
-        slack = SlackReporter()
-        # Create a link to the report (you may need to adjust this URL based on your hosting)
-        report_url = f"file://{saved_path}"  # For local files, or use a web server URL
-        if slack.send_summary(summary, classifications, report_name, recurring, trends['trend'], report_url):
-            logger.info("✅ Slack notification sent")
-        else:
-            logger.warning("⚠️ Failed to send Slack notification")
+
 
     logger.info("🎉 QA AI Agent finished successfully!")
 

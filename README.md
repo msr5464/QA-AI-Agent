@@ -2,6 +2,10 @@
 
 An intelligent AI-powered agent that automatically analyzes automation test reports using a database-first approach. Queries MySQL for test results, enhances with HTML execution logs, and provides actionable insights by distinguishing between product bugs and automation code issues.
 
+## 📸 Sample Report
+
+![Sample Report](sample_report.png)
+
 ## ✨ Features
 
 ### 🎯 Core Capabilities
@@ -39,7 +43,6 @@ An intelligent AI-powered agent that automatically analyzes automation test repo
   - **🧩 Failures by Root Cause Category** - Grouped failures with expandable details
   - **⚠️ Intermittent Failures** - Flaky test detection with execution history
   - Copy-to-clipboard functionality, tooltips, and interactive elements
-  - Slack integration
   - Grouped failures by root cause categories and API endpoints
 
 - **🔍 Advanced Analysis**
@@ -81,7 +84,7 @@ cp config/.env.example config/.env
 2. **Edit `config/.env`**:
    - Set `LLM_PROVIDER=ollama` to use the bundled local workflow (default) or switch to `openai` if you have API access.
    - Adjust the `INPUT_DIR`/`OUTPUT_DIR` paths to wherever your reports live.
-   - Provide your database, Slack, and flaky-test thresholds as needed.
+   - Provide your database credentials and flaky-test thresholds as needed.
 
 > Refer to `config/.env.example` for the complete list of supported variables and default values.
 
@@ -90,18 +93,18 @@ cp config/.env.example config/.env
 **macOS/Linux**
 
 ```bash
-./scripts/run.sh --report-dir testdata/Regression-AccountOpening-Tests-420 --no-slack
+./scripts/run.sh --input-dir testdata/Regression-AccountOpening-Tests-420 --output-dir reports
 ```
 
 **Windows (PowerShell)**
 
 ```powershell
-.\scripts\run.ps1 --report-dir testdata/Regression-AccountOpening-Tests-420 --no-slack
+.\scripts\run.ps1 --input-dir testdata/Regression-AccountOpening-Tests-420 --output-dir reports
 ```
 
-Both scripts default to `--report-dir testdata/Regression-Growth-Tests-442 --no-slack` when no arguments are passed. Supply additional CLI flags (e.g., `--slack-channel`, `--dashboard-url`) exactly as you would with `python src/main.py`.
+Both scripts default to `--input-dir testdata/Regression-Growth-Tests-442 --output-dir reports` when no arguments are passed. You can also specify custom input and output directories as needed.
 
-**Note**: High-level flow — locate report, query MySQL, parse HTML logs, merge everything, run AI analysis, and render HTML/Slack outputs. Full details live in the **Workflow & Data Flow** section below.
+**Note**: High-level flow — locate report, query MySQL, parse HTML logs, merge everything, run AI analysis, and render HTML reports. Full details live in the **Workflow & Data Flow** section below.
 
 The agent uses a database-first approach:
 1. Queries MySQL database for test results by buildTag
@@ -143,8 +146,7 @@ myQaAgent/
 │       ├── html_styles.py        # CSS styles (extracted for maintainability)
 │       ├── html_scripts.py       # JavaScript code (extracted for maintainability)
 │       ├── category_rules.py     # Root cause category classification rules
-│       ├── data_validator.py     # Data validation before/after report generation
-│       └── slack_reporter.py     # Slack notifications
+│       └── data_validator.py     # Data validation before/after report generation
 ├── testdata/                     # Default INPUT_DIR (gitignored contents)
 ├── reports/                      # Default OUTPUT_DIR (gitignored contents)
 ├── tests/                        # Unit and integration tests
@@ -173,11 +175,11 @@ The QA AI Agent is built around a modular, database-first architecture so each c
 ### Reporters (`src/reporters/`)
 - `report_generator.py` produces the interactive HTML report, pulling styles from `html_styles.py` and behavior from `html_scripts.py`.
 - `category_rules.py` refines AI-provided categories using prioritized rules (e.g., ElementClickIntercepted before Timeout) to keep output consistent release-over-release.
-- `data_validator.py` performs pre/post generation validation for data integrity, and `slack_reporter.py` pushes concise summaries to Slack when configured.
+- `data_validator.py` performs pre/post generation validation for data integrity.
 
 ### Utilities & Configuration
 - `src/utils.py` houses helpers such as `TestNameNormalizer`, HTML cache utilities, and text cleaners for root-cause normalization.
-- `src/settings.py` centralizes environment configuration (database, LLM provider, report paths, flaky detection thresholds, dashboards, Slack).
+- `src/settings.py` centralizes environment configuration (database, LLM provider, report paths, flaky detection thresholds, and dashboards).
 
 ### Key Design Decisions
 1. **Database-First**: Prefer querying MySQL first, then enrich with HTML logs for fidelity.
@@ -196,7 +198,7 @@ The QA AI Agent is built around a modular, database-first architecture so each c
 7. **Refine root-cause category** with the rule engine.
 8. **Generate executive summary** and metrics.
 9. **Render HTML report** with CSS/JS assets.
-10. **Save + send notifications** (reports directory + Slack if enabled).
+10. **Save reports** to the configured output directory.
 
 ```
 ┌────────────────────┐
@@ -230,7 +232,7 @@ The QA AI Agent is built around a modular, database-first architecture so each c
       └──────┬────────┘
              ▼
       ┌───────────────┐
-      │ HTML + Slack  │
+      │  HTML Report  │
       └───────────────┘
 ```
 
@@ -273,7 +275,7 @@ Summary stats + classifications + history
         ├─> SummaryGenerator (AI narrative)
         └─> ReportGenerator (HTML/CSS/JS)
                 │
-                └─> Interactive HTML report + Slack payload
+                └─> Interactive HTML report
 ```
 
 ### Classification Flow (Two Levels)
@@ -333,9 +335,9 @@ ReportGenerator
      • Footer & links
         │
         ▼
-Save AI-Analysis-Report_*.html + optional Slack notification
+Save AI-Analysis-Report_*.html to output directory
 ```
-
+---
 
 ## 🛠️ Technology Stack
 
@@ -351,7 +353,6 @@ Save AI-Analysis-Report_*.html + optional Slack notification
 
 **Reporting & Tooling**
 - HTML5/CSS3/Vanilla JS for interactive reports (donut charts, tooltips, copy-to-clipboard)
-- Slack SDK for notifications
 - python-dotenv, pathlib, logging for configuration and diagnostics
 
 **Testing**
@@ -385,11 +386,12 @@ Ready to run it in your environment? Configure the basics below and launch via `
 - **AI provider**: Set `LLM_PROVIDER` to `ollama` (default) or `openai`. When using OpenAI, supply `OPENAI_API_KEY` and your preferred `OPENAI_MODEL`. For Ollama, adjust `OLLAMA_MODEL` / `OLLAMA_BASE_URL` if you host it elsewhere.
 - **Database**: Update `DB_HOST`, `DB_USER`, `DB_PASSWORD`, and `DB_NAME` to point at the MySQL instance that stores your automation runs. Each suite/buildTag should have its own results table (e.g., `results_accountopening`).
 - **Report paths**: `INPUT_DIR` and `OUTPUT_DIR` default to `testdata/` and `reports/`. Change them in `.env` if your artifacts live somewhere else.
-- **Slack & dashboards**: Provide `SLACK_BOT_TOKEN`, `SLACK_CHANNEL`, and `DASHBOARD_BASE_URL` to enable outgoing notifications and deep links.
+- **Dashboards**: Provide `DASHBOARD_BASE_URL` to enable deep links to test reports.
 - **Flaky detection**: Tune `FLAKY_TESTS_LAST_RUNS` (window) and `FLAKY_TESTS_MIN_FAILURES` (threshold) to match your stability expectations.
 
 Full variable list with defaults lives in `config/.env.example`.
 
+---
 
 ## 📈 Report Features
 
@@ -444,6 +446,8 @@ All architectural, workflow, and troubleshooting guidance now lives in this READ
 - Database credentials should be secured
 - Consider using parameterized queries for database operations
 
+---
+
 ## 🐛 Troubleshooting
 
 ### Common Issues
@@ -463,17 +467,17 @@ A: Verify MySQL is running and credentials in `config/.env` are correct
 **Q: Ollama not working?**  
 A: Ensure Ollama is running (`ollama serve`) and model is downloaded (`ollama pull llama3.2:3b`)
 
+---
+
 ## 🤝 Contributing
 
 This is currently a private project. For questions or suggestions, contact the development team.
 
-## 📝 License
 
-Internal use only - [Your Company Name]
+---
 
-## 🆘 Support
+## 👤 Creator
 
-For issues or questions:
-- Revisit the **Workflow & Data Flow** and **Architecture** sections above
-- Review the [troubleshooting section](#-troubleshooting)
-- Contact the development team
+**Mukesh Rajput** For any further help or queries, contact [@mukesh.rajput](https://www.linkedin.com/in/mukesh-rajput/)
+
+---

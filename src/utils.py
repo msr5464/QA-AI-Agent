@@ -4,7 +4,8 @@ Consolidates duplicate code to reduce maintenance burden.
 """
 
 import re
-from typing import Optional
+from typing import Optional, Tuple
+from pathlib import Path
 
 
 class TestNameNormalizer:
@@ -78,6 +79,107 @@ class TestNameNormalizer:
                     return result
         
         return None
+
+
+class ReportUrlBuilder:
+    """
+    Centralized utility for building report URLs.
+    Consolidates logic for extracting project/job names and constructing dashboard links.
+    """
+    
+    @staticmethod
+    def extract_project_name(report_name: str) -> str:
+        """Extract project name from report name.
+        
+        Args:
+            report_name: Report name like "Regression-AccountOpening-Tests-420" or "ProdSanity-All-Tests-523"
+            
+        Returns:
+            Project name like "AccountOpening" or "ProdSanity" or empty string if not found
+        """
+        if not report_name:
+            return ""
+        
+        # Pattern: {Prefix}-{ProjectName}-{Suffix} or {ProjectName}-{Suffix}
+        # Examples:
+        #   "Regression-Growth-Tests-442" -> "Growth" (2nd segment for Regression-*)
+        #   "Regression-AccountOpening-Tests-420" -> "AccountOpening" (2nd segment)
+        #   "ProdSanity-All-Tests-523" -> "ProdSanity" (1st segment for non-Regression)
+        parts = report_name.split('-')
+        if len(parts) >= 2:
+            if parts[0] == 'Regression' and len(parts) >= 3:
+                # For Regression-*, use 2nd segment
+                return parts[1]
+            else:
+                # For others (like ProdSanity), use 1st segment
+                return parts[0]
+        else:
+            # Fallback if no hyphens
+            return report_name
+
+    @staticmethod
+    def extract_project_job_from_path(report_dir: str) -> Tuple[Optional[str], Optional[str]]:
+        """
+        Extract project name and job name from directory structure.
+        
+        Args:
+            report_dir: Path to report directory
+            
+        Returns:
+            Tuple of (project_name, job_name) or (None, None) if extraction fails
+        """
+        try:
+            report_path_obj = Path(report_dir).resolve()
+            
+            # Try to extract from path first
+            # Expected structure: .../ProjectName/JobName/ReportName
+            job_name = report_path_obj.parent.name
+            project_name = report_path_obj.parent.parent.name
+            
+            # Validate extracted names (ensure they are not empty or root)
+            if not job_name or not project_name or job_name == report_path_obj.anchor:
+                return None, None
+            
+            return project_name, job_name
+            
+        except Exception:
+            return None, None
+            
+    @staticmethod
+    def build_dashboard_url(base_url: str, report_name: str, html_path: str = "html/index.html", 
+                          project_name: str = None, job_name: str = None) -> str:
+        """Build dashboard URL for a report.
+        
+        Args:
+            base_url: Base URL of the dashboard
+            report_name: Report name like "Regression-AccountOpening-Tests-420" or "ProdSanity-All-Tests-523"
+            html_path: Path within the HTML directory (e.g., "html/index.html" or "html/suite1_test1_results.html")
+            project_name: Optional explicit project name
+            job_name: Optional explicit job name
+            
+        Returns:
+            Full dashboard URL
+        """
+        if not report_name:
+            return html_path
+        
+        # Use provided project_name or extract it
+        if not project_name:
+            project_name = ReportUrlBuilder.extract_project_name(report_name)
+        
+        if not project_name:
+            return html_path
+        
+        # Special case: ProdSanity reports don't have job name in the path
+        if report_name.startswith('ProdSanity-'):
+            return f"{base_url}/Results/{project_name}/{report_name}/{html_path}"
+        
+        # Use provided job_name or default to Access-Jobs
+        if not job_name:
+            job_name = "Access-Jobs"
+            
+        # Standard pattern: /Results/{project_name}/{job_name}/{report_name}/html/...
+        return f"{base_url}/Results/{project_name}/{job_name}/{report_name}/{html_path}"
 
 
 def remove_duplicate_class_name(class_name: str) -> str:
@@ -476,4 +578,3 @@ def extract_class_and_method(full_name: str) -> tuple[str, str]:
     class_name = parts[-2]
     
     return (class_name, method_name)
-

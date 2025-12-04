@@ -188,30 +188,19 @@ def get_execution_logs_from_html(report_dir: str) -> tuple[Dict[str, str], Dict[
             base_url = Config.DASHBOARD_BASE_URL
             report_name = Path(report_dir).name
             
-            # Extract project name from directory name
-            # Pattern: {Prefix}-{ProjectName}-{Suffix} or {ProjectName}-{Suffix}
-            # Examples:
-            #   "Regression-Growth-Tests-442" -> "Growth" (2nd segment for Regression-*)
-            #   "Regression-AccountOpening-Tests-420" -> "AccountOpening" (2nd segment)
-            #   "ProdSanity-All-Tests-523" -> "ProdSanity" (1st segment for non-Regression)
-            parts = report_name.split('-')
-            if len(parts) >= 2:
-                if parts[0] == 'Regression' and len(parts) >= 3:
-                    # For Regression-*, use 2nd segment
-                    project_name = parts[1]
-                else:
-                    # For others, use 1st segment
-                    project_name = parts[0]
-            else:
-                # Fallback if no hyphens
-                project_name = report_name
+            # Extract project name and job name using centralized builder
+            from ..utils import ReportUrlBuilder
             
-            # Special case: ProdSanity reports don't have /Access-Jobs/ in the path
-            if report_name.startswith('ProdSanity-'):
-                html_base_url = f"{base_url}/Results/{project_name}/{report_name}/html/"
-            else:
-                # Standard pattern: /Results/{project_name}/Access-Jobs/{report_name}/html/
-                html_base_url = f"{base_url}/Results/{project_name}/Access-Jobs/{report_name}/html/"
+            project_name, job_name = ReportUrlBuilder.extract_project_job_from_path(report_dir)
+            
+            # Construct URL
+            html_base_url = ReportUrlBuilder.build_dashboard_url(
+                base_url, 
+                report_name, 
+                "html/", 
+                project_name, 
+                job_name
+            )
         except:
             # Fallback to relative path
             html_base_url = "html/"

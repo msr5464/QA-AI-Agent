@@ -1,6 +1,6 @@
 """
 HTML Report Generator for test reports.
-Generates HTML reports that can be shared via Slack links.
+Generates comprehensive HTML reports with test failures, AI analysis, and trends.
 """
 
 import os
@@ -13,7 +13,15 @@ from pathlib import Path
 
 from ..parsers.models import TestSummary, TestResult
 from ..agent.analyzer import FailureClassification
-from ..utils import remove_duplicate_class_name, normalize_root_cause, TestNameNormalizer, TestDataCache, extract_class_and_method
+from ..utils import (
+    TestNameNormalizer,
+    TestDataCache,
+    extract_api_endpoint,
+    remove_duplicate_class_name,
+    extract_class_and_method,
+    ReportUrlBuilder,
+    normalize_root_cause
+)
 from ..settings import Config
 from .category_rules import CategoryRuleEngine
 from .data_validator import validate_report_data, validate_post_report
@@ -276,59 +284,6 @@ class ReportGenerator:
         except Exception as e:
             logger.debug(f"Could not parse automation group and branch: {e}")
             return None, None
-    
-    def _extract_project_name(self, report_name: str) -> str:
-        """Extract project name from report name.
-        
-        Args:
-            report_name: Report name like "Regression-AccountOpening-Tests-420" or "ProdSanity-All-Tests-523"
-            
-        Returns:
-            Project name like "AccountOpening" or "ProdSanity" or empty string if not found
-        """
-        if not report_name:
-            return ""
-        
-        # Pattern: {Prefix}-{ProjectName}-{Suffix} or {ProjectName}-{Suffix}
-        # Examples:
-        #   "Regression-Growth-Tests-442" -> "Growth" (2nd segment for Regression-*)
-        #   "Regression-AccountOpening-Tests-420" -> "AccountOpening" (2nd segment)
-        #   "ProdSanity-All-Tests-523" -> "ProdSanity" (1st segment for non-Regression)
-        parts = report_name.split('-')
-        if len(parts) >= 2:
-            if parts[0] == 'Regression' and len(parts) >= 3:
-                # For Regression-*, use 2nd segment
-                return parts[1]
-            else:
-                # For others (like ProdSanity), use 1st segment
-                return parts[0]
-        else:
-            # Fallback if no hyphens
-            return report_name
-    
-    def _build_dashboard_url(self, report_name: str, html_path: str = "html/index.html") -> str:
-        """Build dashboard URL for a report.
-        
-        Args:
-            report_name: Report name like "Regression-AccountOpening-Tests-420" or "ProdSanity-All-Tests-523"
-            html_path: Path within the HTML directory (e.g., "html/index.html" or "html/suite1_test1_results.html")
-            
-        Returns:
-            Full dashboard URL
-        """
-        if not report_name:
-            return html_path
-        
-        project_name = self._extract_project_name(report_name)
-        if not project_name:
-            return html_path
-        
-        # Special case: ProdSanity reports don't have /Access-Jobs/ in the path
-        if report_name.startswith('ProdSanity-'):
-            return f"{Config.DASHBOARD_BASE_URL}/Results/{project_name}/{report_name}/{html_path}"
-        else:
-            # Standard pattern: /Results/{project_name}/Access-Jobs/{report_name}/html/...
-            return f"{Config.DASHBOARD_BASE_URL}/Results/{project_name}/Access-Jobs/{report_name}/{html_path}"
     
     def _get_test_info(self, test_name: str, test_results: Optional[List[TestResult]], report_dir: Optional[str] = None) -> Tuple[str, str, str]:
         """
@@ -2077,8 +2032,13 @@ class ReportGenerator:
 
         # Get CSS styles and JavaScript from separate modules
         css_styles = get_html_styles(c_success, c_warning, c_danger, c_info, c_text, c_light)
-        project_name = self._extract_project_name(report_name)
-        js_scripts = get_html_scripts(Config.DASHBOARD_BASE_URL, project_name)
+        
+        # Extract project and job name for correct links
+        project_name_from_path, job_name_from_path = ReportUrlBuilder.extract_project_job_from_path(report_dir)
+        
+        # Use extracted project name for JS scripts if available, otherwise fallback
+        project_name_for_js = project_name_from_path if project_name_from_path else ReportUrlBuilder.extract_project_name(report_name)
+        js_scripts = get_html_scripts(Config.DASHBOARD_BASE_URL, project_name_for_js)
         
         # Build HTML - use f-string for most content, but concatenate JavaScript separately
         html = f"""<!DOCTYPE html>
@@ -2098,7 +2058,7 @@ class ReportGenerator:
                     <h1 class="report-title">AI-Generated Automation Report</h1>
                     <div class="report-meta" style="display: flex; align-items: center; justify-content: center; gap: 8px;">
                         <strong>{report_name}</strong>
-                        {'<a href="' + self._build_dashboard_url(report_name, "html/index.html") + '" target="_blank" style="color: #ffffff; opacity: 0.9; text-decoration: none; display: inline-flex; align-items: center; line-height: 1;"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg></a>' if report_name else ''}
+                        {'<a href="' + ReportUrlBuilder.build_dashboard_url(Config.DASHBOARD_BASE_URL, report_name, "html/index.html", project_name_from_path, job_name_from_path) + '" target="_blank" style="color: #ffffff; opacity: 0.9; text-decoration: none; display: inline-flex; align-items: center; line-height: 1;"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg></a>' if report_name else ''}
                     </div>
                     {'<div class="report-meta" style="margin-top: 4px; font-size: 12px;">Group: ' + str(automation_group) + ' • Branch: ' + str(automation_branch) + '</div>' if automation_group and automation_branch else ''}
                 </div>
@@ -2159,6 +2119,7 @@ class ReportGenerator:
         """
             
         # Only show if we have categories
+        total_failures = 0
         if category_counts:
             # Helpers and styling metadata for the grid
             def truncate_text(text: str, limit: int = 180) -> str:
@@ -2722,8 +2683,8 @@ class ReportGenerator:
                                         {pill_html}
                                 </div>
                                     <div class="root-cause-card-count">
-                                        <span class="count">{count}</span>
-                                        <span class="percent">{percentage:.1f}% of failures</span>
+                                        <span class="count">{count} tests</span>
+                                        <span class="percent">{percentage:.1f}% of all failures</span>
                                 </div>
                             </div>
                                 <div class="root-cause-meter">
@@ -2973,7 +2934,8 @@ class ReportGenerator:
             """
 
         # Build the full logs URL
-        full_logs_url = self._build_dashboard_url(report_name, "html/index.html")
+        # Build the full logs URL
+        full_logs_url = ReportUrlBuilder.build_dashboard_url(Config.DASHBOARD_BASE_URL, report_name, "html/index.html", project_name_from_path, job_name_from_path)
         
         html += f"""
                 <div class="footer">

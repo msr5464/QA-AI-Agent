@@ -8,9 +8,11 @@ import logging
 from typing import Optional, Dict
 
 try:
-    import mysql.connector
-    from mysql.connector import Error
+    import pymysql
+    from pymysql import Error
     MYSQL_AVAILABLE = True
+    # Make pymysql compatible with mysql-connector-python style
+    pymysql.install_as_MySQLdb()
 except ImportError:
     MYSQL_AVAILABLE = False
     Error = Exception  # Fallback for type hints
@@ -20,7 +22,7 @@ from .settings import Config
 logger = logging.getLogger(__name__)
 
 if not MYSQL_AVAILABLE:
-    logger.warning("mysql-connector-python not installed. MySQL features will be disabled.")
+    logger.warning("pymysql not installed. MySQL features will be disabled.")
 
 
 class Database:
@@ -29,17 +31,24 @@ class Database:
     def __init__(self):
         """Initialize database connection with configuration from Config"""
         if not MYSQL_AVAILABLE:
-            raise ImportError("mysql-connector-python is required. Install with: pip install mysql-connector-python")
+            raise ImportError("pymysql is required. Install with: pip install pymysql")
         
         self.db_config = Config.get_db_config()
     
     def get_connection(self):
         """Get MySQL database connection."""
         if not MYSQL_AVAILABLE:
-            raise ImportError("mysql-connector-python is not installed")
+            raise ImportError("pymysql is not installed. Install with: pip install pymysql")
         
         try:
-            connection = mysql.connector.connect(**self.db_config)
+            # Use pymysql with proper parameter names
+            config_with_timeout = self.db_config.copy()
+            # pymysql uses 'connect_timeout' not 'connection_timeout'
+            config_with_timeout['connect_timeout'] = 5
+            if 'connection_timeout' in config_with_timeout:
+                del config_with_timeout['connection_timeout']
+            
+            connection = pymysql.connect(**config_with_timeout)
             return connection
         except Error as e:
             logger.error(f"Error connecting to MySQL database: {e}")

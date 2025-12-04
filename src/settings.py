@@ -21,6 +21,7 @@ class Config:
     
     # Database Configuration
     DB_HOST = os.getenv('DB_HOST', 'localhost')
+    DB_PORT = int(os.getenv('DB_PORT', '3306'))
     DB_USER = os.getenv('DB_USER', 'root')
     DB_PASSWORD = os.getenv('DB_PASSWORD', '')
     DB_NAME = os.getenv('DB_NAME', 'thanos')
@@ -31,10 +32,6 @@ class Config:
     OLLAMA_BASE_URL = os.getenv('OLLAMA_BASE_URL', 'http://localhost:11434')
     OPENAI_API_KEY = os.getenv('OPENAI_API_KEY', '')
     OPENAI_MODEL = os.getenv('OPENAI_MODEL', 'gpt-4o-mini')
-    
-    # Slack Configuration
-    SLACK_BOT_TOKEN = os.getenv('SLACK_BOT_TOKEN', '')
-    SLACK_CHANNEL = os.getenv('SLACK_CHANNEL', '#automation-reports')
     
     # Report Configuration
     INPUT_DIR = os.getenv('INPUT_DIR', 'testdata')
@@ -56,6 +53,7 @@ class Config:
         """Get database configuration dictionary"""
         return {
             'host': cls.DB_HOST,
+            'port': cls.DB_PORT,
             'user': cls.DB_USER,
             'password': cls.DB_PASSWORD,
             'database': cls.DB_NAME

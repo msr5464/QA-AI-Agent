@@ -149,7 +149,23 @@ class SummaryGenerator:
         
         # Note: Test Execution Overview removed - Dashboard at top already shows this information
         
-        # 1. Failure Breakdown by Category (aligned with Root Cause Categories section)
+        # 0. No Data Message
+        if summary.total == 0:
+            html.append('<div style="text-align: center; padding: 24px; background: #fff3cd; border-radius: 8px; border: 1px solid #ffeeba; margin-bottom: 20px; font-family: -apple-system, BlinkMacSystemFont, \'Segoe UI\', Roboto, Helvetica, Arial, sans-serif;">')
+            html.append('<h3 style="color: #856404; margin-top: 0; margin-bottom: 8px; font-size: 20px; font-weight: 600;">⚠️ No Test Results Found</h3>')
+            html.append('<p style="color: #856404; margin-bottom: 0; font-size: 15px;">No test execution data was found for this report. Please check if the data has been uploaded to the database.</p>')
+            html.append('</div>')
+            return ''.join(html)
+
+        # 1. All Tests Passed Message
+        if summary.failed == 0 and summary.errors == 0:
+            html.append('<div style="text-align: center; padding: 24px; background: #f0fdf4; border-radius: 8px; border: 1px solid #bbf7d0; margin-bottom: 20px; font-family: -apple-system, BlinkMacSystemFont, \'Segoe UI\', Roboto, Helvetica, Arial, sans-serif;">')
+            html.append('<div style="font-size: 48px; margin-bottom: 16px;">🎉</div>')
+            html.append('<h3 style="color: #166534; margin-top: 0; margin-bottom: 8px; font-size: 20px; font-weight: 600;">Excellent! All tests passed.</h3>')
+            html.append('<p style="color: #15803d; margin-bottom: 0; font-size: 15px;">No failures were detected in this execution. The system appears stable.</p>')
+            html.append('</div>')
+        
+        # 2. Failure Breakdown by Category (aligned with Root Cause Categories section)
         if category_counts and category_failures:
             html.append('<div style="margin-bottom: 15px;">')
             html.append('<h3 style="color: #2c3e50; margin-bottom: 8px; font-size: 16px; border-bottom: 2px solid #6610f2; padding-bottom: 6px; font-family: -apple-system, BlinkMacSystemFont, \'Segoe UI\', Roboto, Helvetica, Arial, sans-serif;">🧩 Failure Breakdown by Category</h3>')
@@ -298,8 +314,8 @@ class SummaryGenerator:
                                 </div>
                             </div>
                             <div style="display: flex; align-items: baseline; gap: 6px; flex-shrink: 0;">
-                                <span style="font-size: 14px; font-weight: 600; color: #111827;">{count}</span>
-                                <span style="font-size: 11px; color: #6b7280;">({percentage:.1f}%)</span>
+                                <span style="font-size: 14px; font-weight: 600; color: #111827;">{count} tests</span>
+                                <span style="font-size: 11px; color: #6b7280;">({percentage:.1f}% of all failures)</span>
                             </div>
                         </div>
                     ''')

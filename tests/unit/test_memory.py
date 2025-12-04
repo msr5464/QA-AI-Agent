@@ -27,7 +27,7 @@ def test_memory_initialization():
     return True
     except ImportError as e:
         print(f"\n❌ MySQL connector not available: {e}")
-        print("   Install with: pip install mysql-connector-python")
+        print("   Install with: pip install pymysql")
         print("\n❌ Test 1 FAILED\n")
         return False
     except Exception as e:

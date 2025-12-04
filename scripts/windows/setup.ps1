@@ -65,7 +65,7 @@ if (-not (Test-Path $envPath) -and (Test-Path $envExamplePath)) {
 }
 
 Write-Step "Setup complete. Next steps:"
-Write-Host "  1. Update config\.env with your database, AI provider, and Slack details." -ForegroundColor Yellow
+Write-Host "  1. Update config\.env with your database and AI provider details." -ForegroundColor Yellow
 Write-Host "  2. Place/verify your report folders under testdata/ (or adjust INPUT_DIR)." -ForegroundColor Yellow
-Write-Host "  3. Run the agent via: powershell -ExecutionPolicy Bypass -File .\scripts\run.ps1 --report-dir testdata/Regression-Growth-Tests-442" -ForegroundColor Yellow
+Write-Host "  3. Run the agent via: powershell -ExecutionPolicy Bypass -File .\scripts\run.ps1 --input-dir testdata/Regression-Growth-Tests-442 --output-dir reports" -ForegroundColor Yellow
 

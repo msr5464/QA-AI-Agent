@@ -27,21 +27,21 @@ This document summarizes the recommended steps for standing up the QA AI Agent o
    - Copies `config\.env.example` → `config\.env` if needed
 
 4. **Configure environment**
-   - Edit `config\.env` with DB credentials, AI provider (`LLM_PROVIDER`, `OPENAI_*` / `OLLAMA_*`), `INPUT_DIR`, `OUTPUT_DIR`, Slack tokens, etc.
+   - Edit `config\.env` with DB credentials, AI provider (`LLM_PROVIDER`, `OPENAI_*` / `OLLAMA_*`), `INPUT_DIR`, and `OUTPUT_DIR`.
    - Place automation report folders under `testdata\` (or update `INPUT_DIR`).
 
 5. **Run the agent**
    ```powershell
-   .\scripts\run.ps1 --report-dir testdata\Regression-Growth-Tests-442 --no-slack
+   .\scripts\run.ps1 --input-dir testdata\Regression-Growth-Tests-442 --output-dir reports
    ```
-   HTML output is written to `reports\AI-Analysis-Report_*.html`. Add `--slack-channel` if you want notifications.
+   HTML output is written to `reports\AI-Analysis-Report_*.html`.
 
 6. **Optional automation**
    - Schedule recurring runs via Windows Task Scheduler:
      ```
      Action: Start a program
      Program/script: powershell
-     Arguments: -ExecutionPolicy Bypass -File C:\path\to\QA-AI-Agent\scripts\run.ps1 --report-dir ...
+     Arguments: -ExecutionPolicy Bypass -File C:\path\to\QA-AI-Agent\scripts\run.ps1 --input-dir testdata\Regression-Growth-Tests-442 --output-dir reports
      ```
    - Redirect logs or archive report artifacts as needed.
 
@@ -64,7 +64,6 @@ This document summarizes the recommended steps for standing up the QA AI Agent o
            script {
                def qaAgentHome = "C:\\jenkins\\tools\\QA-AI-Agent"
                def reportDir = "testdata\\${env.JOB_NAME}-${env.BUILD_NUMBER}"
-               def slackFlag = params.SEND_REPORT_ON_SLACK ? "" : "--no-slack"
 
                bat """
                    if not exist "${qaAgentHome}" (
@@ -79,23 +78,17 @@ This document summarizes the recommended steps for standing up the QA AI Agent o
 
                bat """
                    cd /d "${qaAgentHome}"
-                   powershell -ExecutionPolicy Bypass -File .\\scripts\\run.ps1 --report-dir "${reportDir}" ${slackFlag}
+                   powershell -ExecutionPolicy Bypass -File .\\scripts\\run.ps1 --input-dir "${reportDir}" --output-dir reports
                """
-
-               archiveArtifacts artifacts: "${qaAgentHome}\\reports\\AI-Analysis-Report_*.html", fingerprint: true
-           }
-       }
-   }
-   ```
 
    Adjust paths to match wherever Jenkins stores the automation output. If your Gradle job writes reports outside the agent repo, copy them under `testdata\` (or set `INPUT_DIR` accordingly) before calling `scripts\run.ps1`.
 
 3. **Environment secrets**
-   - Store DB passwords, API keys, or Slack tokens using Jenkins credentials.
+   - Store DB passwords and API keys using Jenkins credentials.
    - You can inject them into `config\.env` during the pipeline via `withCredentials`/`writeFile`.
 
 4. **Parallel suites**
-   - Run multiple report analyses by invoking `scripts\run.ps1` with different `--report-dir` arguments, either sequentially or in parallel stages.
+   - Run multiple report analyses by invoking `scripts\run.ps1` with different `--input-dir` arguments, either sequentially or in parallel stages.
 
 5. **Monitoring**
    - Archive the generated HTML or publish it via Jenkins “HTML Publisher” to make it easy to view.

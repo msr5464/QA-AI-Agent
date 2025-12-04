@@ -1,3 +1,20 @@
+<#
+.SYNOPSIS
+    Unified run script for the AI QA Agent (Windows).
+
+.DESCRIPTION
+    Usage examples:
+      .\scripts\run.ps1
+        Runs with default input directory (testdata/Regression-Growth-Tests-442)
+        and output directory (reports).
+
+      .\scripts\run.ps1 --input-dir testdata/Regression-Smoke-Tests-420 --output-dir custom-reports
+        Runs against a custom input directory with a custom output directory.
+
+      .\scripts\run.ps1 --table-name results_custom_project
+        Runs with explicit database table name, overriding auto-detection.
+#>
+
 [CmdletBinding()]
 param(
     [Parameter(ValueFromRemainingArguments = $true)]
@@ -6,7 +23,11 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-$defaultArgs = @("--report-dir", "testdata/Regression-Growth-Tests-442", "--no-slack")
+# Set UTF-8 encoding for console output to support emoji characters
+$env:PYTHONIOENCODING = "utf-8"
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+
+$defaultArgs = @("--input-dir", "testdata/Regression-Growth-Tests-442", "--output-dir", "reports")
 if (-not $Arguments -or $Arguments.Count -eq 0) {
     $Arguments = $defaultArgs
 }
