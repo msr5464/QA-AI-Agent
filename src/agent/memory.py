@@ -546,8 +546,11 @@ class AgentMemory:
         
         # Get test execution history from database
         # Query by testcaseName to get last X executions across all builds
+        # Normalize report path for cross-platform inputs (UNC/Windows)
+        from src.utils import ReportUrlBuilder
+        normalized_report_name = ReportUrlBuilder.normalize_path(report_name)
         test_history = self._get_test_execution_history_from_db(
-            report_name, 
+            normalized_report_name, 
             test_names=test_names_to_query,
             limit_per_test=Config.FLAKY_TESTS_LAST_RUNS,
             table_name=table_name
@@ -639,125 +642,39 @@ class AgentMemory:
                         classification = self._classify_from_error_message(error_msg)
                         failure_details[test_name]['classifications'].append(classification)
         
-        # Build history vector for each test (1=Pass, 0=Fail)
+        # Build history vector for each test (1=Pass, 0=Fail) using last N executions (newest first from DB)
         recurring = []
         for test_name, count in failure_counts.items():
             details = failure_details[test_name]
             
-            # Generate history vector
-            history = []
+            # Always use execution order (not date buckets) to build history
+            executions = details['executions'][:Config.FLAKY_TESTS_LAST_RUNS]  # newest first
             
-            if sorted_dates:
-                # If we have dates, generate history based on dates (last N days)
-                for date in sorted_dates:
-                    # Check if this test failed on this date
-                    failed_on_date = False
-                    for exec_record in details['executions']:
-                        exec_date = exec_record.get('date') or exec_record.get('executionDate')
-                        if exec_date:
-                            # Normalize date
-                            if hasattr(exec_date, 'date'):
-                                exec_date_obj = exec_date.date()
-                            elif isinstance(exec_date, str):
-                                try:
-                                    from datetime import datetime
-                                    exec_date_obj = datetime.strptime(exec_date.split()[0], '%Y-%m-%d').date()
-                                except:
-                                    continue
-                            else:
-                                exec_date_obj = exec_date
-                            
-                            # Check testStatus - use ONLY testStatus column from database
-                            exec_status = exec_record.get('testStatus')
-                            
-                            # Determine if this execution failed using testStatus
-                            is_failure = False
-                            
-                            if exec_status:
-                                status = str(exec_status).upper().strip()
-                                # Check for failure statuses
-                                if status in ['FAIL', 'FAILED', 'ERROR', 'FAILURE']:
-                                    is_failure = True
-                                elif status in ['PASS', 'PASSED', 'SUCCESS', 'OK']:
-                                    is_failure = False
-                                else:
-                                    # Unknown status - log for debugging
-                                    logger.debug(f"Unknown testStatus '{exec_status}' for {test_name} on {date}, assuming pass")
-                                    is_failure = False
-                            else:
-                                # No testStatus - log for debugging
-                                logger.debug(f"No testStatus found for {test_name} on {date}, assuming pass")
-                                is_failure = False
-                            
-                            if exec_date_obj == date and is_failure:
-                                failed_on_date = True
-                                break
-                    
-                    history.append(0 if failed_on_date else 1)
+            # Build history from executions (oldest -> newest for display)
+            history = []
+            for idx, exec_record in enumerate(reversed(executions)):  # oldest first
+                exec_status = exec_record.get('testStatus')
+                is_failure = False
                 
-                # If test is in current failures, ensure the most recent date is marked as failed
-                if test_name in current_failures and len(history) > 0:
-                    # The last item in history is the newest date
-                    if history[-1] == 1:  # Currently marked as pass
-                        logger.warning(f"Test {test_name} is in current failures but most recent date marked as pass. Correcting to fail.")
-                        history[-1] = 0  # Mark as fail
-            else:
-                # If no dates available, use last N executions directly (ordered by id desc)
-                # Executions are already ordered by id DESC (newest first from database query)
-                # For history display, we want newest on the right, so we'll reverse at the end
-                executions = details['executions'][:10]  # Last 10 executions (newest first)
-                
-                # Build history from executions (oldest to newest for display)
-                # Use testStatus column directly from DB - this is the ONLY source of truth
-                temp_history = []
-                for idx, exec_record in enumerate(reversed(executions)):  # Reverse to process oldest first
-                    exec_status = exec_record.get('testStatus')
-                    
-                    is_failure = False
-                    
-                    if exec_status:
-                        status = str(exec_status).upper().strip()
-                        # Check for failure statuses - ONLY use testStatus column
-                        if status in ['FAIL', 'FAILED', 'ERROR', 'FAILURE']:
-                            is_failure = True
-                            logger.debug(f"Execution {idx+1} for {test_name}: testStatus='{exec_status}' -> FAILED")
-                        elif status in ['PASS', 'PASSED', 'SUCCESS', 'OK']:
-                            is_failure = False
-                            logger.debug(f"Execution {idx+1} for {test_name}: testStatus='{exec_status}' -> PASSED")
-                        else:
-                            # Unknown status - log and check if this is current failure
-                            logger.warning(f"Unknown testStatus '{exec_status}' for {test_name} execution {idx+1}")
-                            if idx == len(executions) - 1 and test_name in current_failures:
-                                is_failure = True
-                                logger.debug(f"Marking as failed because test is in current failures")
-                            else:
-                                is_failure = False
+                if exec_status:
+                    status = str(exec_status).upper().strip()
+                    if status in ['FAIL', 'FAILED', 'ERROR', 'FAILURE']:
+                        is_failure = True
+                        logger.debug(f"Execution {idx+1} for {test_name}: testStatus='{exec_status}' -> FAILED")
+                    elif status in ['PASS', 'PASSED', 'SUCCESS', 'OK']:
+                        is_failure = False
+                        logger.debug(f"Execution {idx+1} for {test_name}: testStatus='{exec_status}' -> PASSED")
                     else:
-                        # No testStatus - log and check if this is current failure
-                        logger.warning(f"No testStatus found for {test_name} execution {idx+1}")
-                        if idx == len(executions) - 1 and test_name in current_failures:
-                            is_failure = True
-                            logger.debug(f"Marking as failed because test is in current failures")
-                        else:
-                            is_failure = False
-                    
-                    # 1 = Pass, 0 = Fail
-                    temp_history.append(0 if is_failure else 1)
+                        logger.warning(f"Unknown testStatus '{exec_status}' for {test_name} execution {idx+1}; treating as pass")
+                        is_failure = False
+                else:
+                    # No status available; assume pass
+                    logger.warning(f"No testStatus found for {test_name} execution {idx+1}; treating as pass")
+                    is_failure = False
                 
-                history = temp_history
-                
-                # CRITICAL SAFETY CHECK: If test is in current failures, ALWAYS mark the last (newest) execution as failed
-                # This ensures that tests that failed in the current build are always shown correctly
-                # This is a final override regardless of what the database says
-                if test_name in current_failures and len(history) > 0:
-                    # The last item in history is the newest execution (rightmost dot)
-                    if history[-1] == 1:  # Currently marked as pass
-                        logger.warning(f"Test {test_name} is in current failures but last execution marked as pass. FORCING to fail.")
-                        history[-1] = 0  # Force mark as fail
-                    elif history[-1] == 0:
-                        logger.debug(f"Test {test_name} is in current failures and last execution correctly marked as fail.")
-                
-                logger.info(f"Generated history for {test_name}: {history} (from {len(executions)} executions, no dates available)")
+                history.append(0 if is_failure else 1)
+            
+            logger.info(f"Generated history for {test_name}: {history} (from {len(executions)} executions)")
             
             # Ensure history has exactly 10 items (pad or truncate if needed)
             if len(history) > 10:
@@ -862,7 +779,7 @@ class AgentMemory:
                 exec_detail = {
                     'index': idx,
                     'status': 'pass' if hist_status == 1 else 'fail',  # Use corrected history status
-                    'history_index': idx
+                        'history_index': idx
                 }
                 
                 # Check if this is a padded entry (before actual execution data starts)
@@ -1089,24 +1006,44 @@ class AgentMemory:
                 result = cursor.fetchone()
                 
                 if result and result['total'] > 0:
-                    total = result['total']
-                    passed = result['passed'] or 0
-                    pass_rate = (passed / total) * 100
+                    total_raw = result.get('total')
+                    passed_raw = result.get('passed') or 0
+                    
+                    # Normalize numeric types to avoid mixing Decimal and float
+                    try:
+                        total = int(total_raw)
+                    except (TypeError, ValueError):
+                        total = int(float(total_raw))
+                    
+                    try:
+                        passed = int(passed_raw)
+                    except (TypeError, ValueError):
+                        passed = int(float(passed_raw))
+                    
+                    if total <= 0:
+                        continue
+                    
+                    pass_rate = (passed / total) * 100.0
                     
                     dates.append(build_tag)  # Use buildTag as identifier
-                    pass_rates.append(pass_rate)
+                    pass_rates.append(float(pass_rate))
                     total_tests.append(total)
+            
+            # Reverse arrays so they're chronological (oldest → newest)
+            dates = list(reversed(dates))
+            pass_rates = list(reversed(pass_rates))
+            total_tests = list(reversed(total_tests))
             
             # Calculate trends
             if len(pass_rates) >= 2:
-                # Simple trend: compare first half to second half
+                # Compare older half vs newer half
                 mid = len(pass_rates) // 2
-                first_half_avg = sum(pass_rates[:mid]) / mid
-                second_half_avg = sum(pass_rates[mid:]) / (len(pass_rates) - mid)
+                older_half_avg = sum(pass_rates[:mid]) / mid
+                newer_half_avg = sum(pass_rates[mid:]) / (len(pass_rates) - mid)
                 
-                if second_half_avg > first_half_avg + 5:
+                if newer_half_avg > older_half_avg + 5:
                     trend = 'IMPROVING'
-                elif second_half_avg < first_half_avg - 5:
+                elif newer_half_avg < older_half_avg - 5:
                     trend = 'DECLINING'
                 else:
                     trend = 'STABLE'

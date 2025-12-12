@@ -439,11 +439,34 @@ def get_full_report_data_from_db(report_dir: str, db_results: List[Dict], execut
     
     logger.info(f"Created {len(test_results)} unique TestResult objects from database (with HTML logs merged)")
     
+    # Build fallback HTML links if none were extracted (e.g., missing html/ directory)
+    effective_links = html_links or {}
+    if not effective_links:
+        try:
+            from ..settings import Config
+            from ..utils import ReportUrlBuilder
+            normalized_dir = ReportUrlBuilder.normalize_path(report_dir)
+            report_name = Path(normalized_dir).name
+            project_name, job_name = ReportUrlBuilder.extract_project_job_from_path(normalized_dir)
+            fallback_link = ReportUrlBuilder.build_dashboard_url(
+                Config.DASHBOARD_BASE_URL,
+                report_name,
+                "html/index.html",
+                project_name,
+                job_name
+            )
+            # Map every test to the fallback link so UI still renders clickable links
+            effective_links = {tr.full_name: fallback_link for tr in test_results}
+            logger.info(f"No HTML links found; using fallback link for {len(effective_links)} tests")
+        except Exception as e:
+            logger.warning(f"Failed to build fallback HTML links: {e}")
+            effective_links = {}
+    
     return {
         'test_results': test_results,
         'summary': summary,
         'report_dir': report_dir,
-        'html_links': html_links or {}
+        'html_links': effective_links
     }
 
 

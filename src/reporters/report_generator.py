@@ -2036,9 +2036,10 @@ class ReportGenerator:
         # Extract project and job name for correct links
         project_name_from_path, job_name_from_path = ReportUrlBuilder.extract_project_job_from_path(report_dir)
         
-        # Use extracted project name for JS scripts if available, otherwise fallback
+        # Resolve project/job for URLs and JS (job must come from path/input, no config fallback)
         project_name_for_js = project_name_from_path if project_name_from_path else ReportUrlBuilder.extract_project_name(report_name)
-        js_scripts = get_html_scripts(Config.DASHBOARD_BASE_URL, project_name_for_js)
+        job_name_for_url = job_name_from_path  # None if not derivable
+        js_scripts = get_html_scripts(Config.DASHBOARD_BASE_URL, project_name_for_js, job_name_for_url)
         
         # Build HTML - use f-string for most content, but concatenate JavaScript separately
         html = f"""<!DOCTYPE html>
@@ -2058,7 +2059,7 @@ class ReportGenerator:
                     <h1 class="report-title">AI-Generated Automation Report</h1>
                     <div class="report-meta" style="display: flex; align-items: center; justify-content: center; gap: 8px;">
                         <strong>{report_name}</strong>
-                        {'<a href="' + ReportUrlBuilder.build_dashboard_url(Config.DASHBOARD_BASE_URL, report_name, "html/index.html", project_name_from_path, job_name_from_path) + '" target="_blank" style="color: #ffffff; opacity: 0.9; text-decoration: none; display: inline-flex; align-items: center; line-height: 1;"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg></a>' if report_name else ''}
+                        {'<a href="' + ReportUrlBuilder.build_dashboard_url(Config.DASHBOARD_BASE_URL, report_name, "html/index.html", project_name_from_path, job_name_for_url) + '" target="_blank" style="color: #ffffff; opacity: 0.9; text-decoration: none; display: inline-flex; align-items: center; line-height: 1;"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1-2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg></a>' if report_name else ''}
                     </div>
                     {'<div class="report-meta" style="margin-top: 4px; font-size: 12px;">Group: ' + str(automation_group) + ' • Branch: ' + str(automation_branch) + '</div>' if automation_group and automation_branch else ''}
                 </div>
@@ -2813,6 +2814,17 @@ class ReportGenerator:
                     exec_id = exec_detail.get('id', '')
                     exec_date = html_escape.escape(str(exec_detail.get('date', '')))
                     exec_build = html_escape.escape(str(exec_detail.get('buildTag', '')))
+                    # Build execution URL once on the server to avoid JS duplication
+                    exec_url = ""
+                    if exec_build:
+                        exec_url = ReportUrlBuilder.build_dashboard_url(
+                            Config.DASHBOARD_BASE_URL,
+                            exec_build,
+                            "html/index.html",
+                            project_name_from_path,
+                            job_name_for_url
+                        )
+                        exec_url = html_escape.escape(exec_url)
                     # Get error message (already cleaned of "Results Url:" lines from DB fetch)
                     raw_error = str(exec_detail.get('failureReason', ''))
                     # Remove leading whitespace from each line and trim overall
@@ -2843,6 +2855,7 @@ class ReportGenerator:
                             data-execution-id="{exec_id}"
                             data-execution-date="{exec_date}"
                             data-execution-build="{exec_build}"
+                            data-execution-url="{exec_url}"
                             data-execution-error="{exec_error}"
                             data-execution-status="{exec_status}"
                             data-history-status="{history_status}"

@@ -4,7 +4,7 @@ Extracted from report_generator.py for better maintainability.
 """
 
 
-def get_html_scripts(dashboard_base_url: str, project_name: str) -> str:
+def get_html_scripts(dashboard_base_url: str, project_name: str, job_name: str) -> str:
     """
     Generate JavaScript code for the HTML report.
     
@@ -18,12 +18,14 @@ def get_html_scripts(dashboard_base_url: str, project_name: str) -> str:
     # Escape single quotes in the values to prevent JavaScript errors
     dashboard_base_url_escaped = dashboard_base_url.replace("'", "\\'")
     project_name_escaped = project_name.replace("'", "\\'")
+    job_name_escaped = (job_name or "").replace("'", "\\'")
     
     # Use triple quotes with string concatenation to avoid issues with JavaScript braces
     return (
         """            // Configuration from server
             const DASHBOARD_BASE_URL = '""" + dashboard_base_url_escaped + """';
             const PROJECT_NAME = '""" + project_name_escaped + """';
+            const JOB_NAME = '""" + job_name_escaped + """';
             const newlineChar = '\\n';
             
             // Handle expand icon click to toggle details and update animation
@@ -550,10 +552,10 @@ def get_html_scripts(dashboard_base_url: str, project_name: str) -> str:
                 }
                 
                 // Only show build URL if available
-                if (execBuild && execBuild !== 'N/A' && execBuild.trim() !== '') {
-                    const buildUrl = PROJECT_NAME ? 
-                        `${DASHBOARD_BASE_URL}/Results/${PROJECT_NAME}/Access-Jobs/${execBuild}/html/index.html` :
-                        `${DASHBOARD_BASE_URL}/Results/AccountOpening/Access-Jobs/${execBuild}/html/index.html`;
+                const execUrl = dot.getAttribute('data-execution-url') || '';
+                
+                if (execUrl && execUrl.trim() !== '') {
+                    const buildUrl = execUrl;
                     tableRows += `
                         <tr>
                             <td style="padding: 4px; font-weight: 600; color: #6c757d; font-size: 12px; text-align: left;">Build Url:</td>

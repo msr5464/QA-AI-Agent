@@ -81,7 +81,10 @@ def main():
         return
         
     logger.info(f"📂 Processing report: {report_dir}")
-    report_name = Path(report_dir).name
+    # Normalize report name to handle both POSIX and Windows/UNC style paths
+    from src.utils import ReportUrlBuilder
+    normalized_report_dir = ReportUrlBuilder.normalize_path(report_dir)
+    report_name = Path(normalized_report_dir).name
     
     # Extract buildTag from report name (folder name is the buildTag)
     build_tag = report_name
@@ -127,7 +130,10 @@ def main():
     )
     
     # 4. Trend Analysis
-    trends = {}
+    trends = {
+        'trend': 'UNKNOWN',
+        'average_pass_rate': 0.0
+    }
     try:
         trends = memory.get_trend_analysis(days=10, report_name=report_name, table_name=args.table_name)
     except Exception as e:
@@ -135,7 +141,9 @@ def main():
     
     if recurring:
         logger.info(f"⚠️ Detected {len(recurring)} recurring failures")
-    logger.info(f"📈 Trend: {trends['trend']} (Avg Pass Rate: {trends['average_pass_rate']:.1f}%)")
+    trend_value = trends.get('trend', 'UNKNOWN')
+    avg_pass_rate = trends.get('average_pass_rate', 0.0) or 0.0
+    logger.info(f"📈 Trend: {trend_value} (Avg Pass Rate: {avg_pass_rate:.1f}%)")
     
     # 4. Parse HTML for Execution Logs Only
     logger.info("📄 Extracting execution logs from HTML...")

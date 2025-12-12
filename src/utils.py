@@ -86,6 +86,16 @@ class ReportUrlBuilder:
     Centralized utility for building report URLs.
     Consolidates logic for extracting project/job names and constructing dashboard links.
     """
+
+    @staticmethod
+    def normalize_path(path: str) -> str:
+        """
+        Normalize file paths to use forward slashes for cross-platform compatibility.
+        Handles UNC/Windows backslashes by converting them to POSIX style.
+        """
+        if not path:
+            return path
+        return path.replace('\\', '/')
     
     @staticmethod
     def extract_project_name(report_name: str) -> str:
@@ -129,7 +139,8 @@ class ReportUrlBuilder:
             Tuple of (project_name, job_name) or (None, None) if extraction fails
         """
         try:
-            report_path_obj = Path(report_dir).resolve()
+            normalized_dir = ReportUrlBuilder.normalize_path(report_dir)
+            report_path_obj = Path(normalized_dir).resolve()
             
             # Try to extract from path first
             # Expected structure: .../ProjectName/JobName/ReportName
@@ -174,12 +185,11 @@ class ReportUrlBuilder:
         if report_name.startswith('ProdSanity-'):
             return f"{base_url}/Results/{project_name}/{report_name}/{html_path}"
         
-        # Use provided job_name or default to Access-Jobs
-        if not job_name:
-            job_name = "Access-Jobs"
-            
         # Standard pattern: /Results/{project_name}/{job_name}/{report_name}/html/...
-        return f"{base_url}/Results/{project_name}/{job_name}/{report_name}/{html_path}"
+        # If job_name is missing, omit that segment.
+        if job_name:
+            return f"{base_url}/Results/{project_name}/{job_name}/{report_name}/{html_path}"
+        return f"{base_url}/Results/{project_name}/{report_name}/{html_path}"
 
 
 def remove_duplicate_class_name(class_name: str) -> str:
